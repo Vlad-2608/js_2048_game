@@ -1,4 +1,6 @@
-import * as GameModule from './modules/Game.class.js';
+// import * as GameModule from './modules/Game.class.js';
+const Game = require('../modules/Game.class');
+const game = new Game();
 
 document.addEventListener('DOMContentLoaded', () => {
   const gameField = document.querySelector('.game-field tbody');
@@ -8,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const messageWin = document.querySelector('.message-win');
   const messageLose = document.querySelector('.message-lose');
 
-  const game = new GameModule.Game();
+  // const game = new GameModule.Game();
 
   function updateBoardUI() {
     gameField.innerHTML = '';
