@@ -1,29 +1,17 @@
-'use strict';
-
-class Game {
+export default class Game {
   constructor(initialState) {
-    this.boardSize = 4;
-
-    this.board =
-      initialState ||
-      Array(this.boardSize)
-        .fill(null)
-        .map(() => Array(this.boardSize).fill(null));
+    this.size = 4;
+    this.grid = initialState || this.createEmptyGrid();
     this.score = 0;
-    this.status = this.isBoardEmpty(this.board) ? 'idle' : 'playing';
-    this.hasMoved = false;
-
-    this.hasMerged = Array(this.boardSize)
-      .fill(null)
-      .map(() => Array(this.boardSize).fill(false));
+    this.status = 'start';
   }
 
-  cloneBoard(board) {
-    return board.map((row) => [...row]);
+  createEmptyGrid() {
+    return Array.from({ length: this.size }, () => Array(this.size).fill(0));
   }
 
   getState() {
-    return this.cloneBoard(this.board);
+    return this.grid;
   }
 
   getScore() {
@@ -35,9 +23,7 @@ class Game {
   }
 
   start() {
-    this.board = Array(this.boardSize)
-      .fill(null)
-      .map(() => Array(this.boardSize).fill(null));
+    this.grid = this.createEmptyGrid();
     this.score = 0;
     this.status = 'playing';
     this.addRandomTile();
@@ -51,156 +37,157 @@ class Game {
   addRandomTile() {
     const emptyCells = [];
 
-    for (let i = 0; i < this.boardSize; i++) {
-      for (let j = 0; j < this.boardSize; j++) {
-        if (this.board[i][j] === null) {
-          emptyCells.push({ row: i, col: j });
+    // eslint-disable-next-line no-shadow
+    this.grid.forEach((row, r) => {
+      // eslint-disable-next-line no-shadow
+      row.forEach((cell, c) => {
+        if (cell === 0) {
+          emptyCells.push([r, c]);
         }
-      }
+      });
+    });
+
+    if (emptyCells.length === 0) {
+      return;
     }
 
-    if (emptyCells.length > 0) {
-      const randomIndex = Math.floor(Math.random() * emptyCells.length);
-      const { row, col } = emptyCells[randomIndex];
+    const [r, c] = emptyCells[Math.floor(Math.random() * emptyCells.length)];
 
-      this.board[row][col] = Math.random() < 0.9 ? 2 : 4;
-    } else if (this.status === 'playing' && !this.canMove()) {
-      this.status = 'lose';
-    }
+    this.grid[r][c] = Math.random() < 0.9 ? 2 : 4;
   }
 
-  moveLeft() {
-    this.hasMoved = false;
-    this.resetMergeFlags();
+  move(direction) {
+    let needAddTile = false;
+    let rotated = false;
+    let flipped = false;
 
-    for (let i = 0; i < this.boardSize; i++) {
-      this.board[i] = this.slideAndMerge(this.board[i]);
-    }
-    this.afterMove();
-  }
+    let newGrid = this.grid.map((row) => [...row]); // create deep copy
 
-  moveRight() {
-    this.hasMoved = false;
-    this.resetMergeFlags();
-
-    for (let i = 0; i < this.boardSize; i++) {
-      const reversedRow = [...this.board[i]].reverse();
-      const movedRow = this.slideAndMerge(reversedRow).reverse();
-
-      this.board[i] = movedRow;
-    }
-    this.afterMove();
-  }
-
-  moveUp() {
-    this.hasMoved = false;
-    this.resetMergeFlags();
-
-    for (let j = 0; j < this.boardSize; j++) {
-      const column = this.board.map((row) => row[j]);
-      const movedColumn = this.slideAndMerge(column);
-
-      for (let i = 0; i < this.boardSize; i++) {
-        this.board[i][j] = movedColumn[i];
-      }
-    }
-    this.afterMove();
-  }
-
-  moveDown() {
-    this.hasMoved = false;
-    this.resetMergeFlags();
-
-    for (let j = 0; j < this.boardSize; j++) {
-      const column = this.board.map((row) => row[j]).reverse();
-      const movedColumn = this.slideAndMerge(column).reverse();
-
-      for (let i = 0; i < this.boardSize; i++) {
-        this.board[i][j] = movedColumn[i];
-      }
-    }
-    this.afterMove();
-  }
-
-  slideAndMerge(row) {
-    const nonNull = row.filter((val) => val !== null);
-    const merged = [];
-    const rowMergeFlags = Array(this.boardSize).fill(false);
-
-    for (let i = 0; i < nonNull.length; i++) {
-      if (
-        i + 1 < nonNull.length &&
-        nonNull[i] === nonNull[i + 1] &&
-        !rowMergeFlags[merged.length]
-      ) {
-        const mergedValue = nonNull[i] * 2;
-
-        merged.push(mergedValue);
-        this.score += mergedValue;
-        this.hasMoved = true;
-        rowMergeFlags[merged.length - 1] = true;
-        i++;
-
-        if (mergedValue === 2048 && this.status === 'playing') {
-          this.status = 'win';
-        }
-      } else {
-        merged.push(nonNull[i]);
-      }
+    switch (direction) {
+      case 'up':
+        newGrid = this.rotateLeft(newGrid);
+        rotated = true;
+        break;
+      case 'down':
+        newGrid = this.rotateRight(newGrid);
+        rotated = true;
+        break;
+      case 'right':
+        newGrid = this.flip(newGrid);
+        flipped = true;
+        break;
     }
 
-    while (merged.length < this.boardSize) {
-      merged.push(null);
+    const oldGridStr = JSON.stringify(newGrid);
+
+    newGrid = newGrid.map((row) => this.slideAndCombineRow(row));
+
+    const newGridStr = JSON.stringify(newGrid);
+
+    if (oldGridStr !== newGridStr) {
+      needAddTile = true;
     }
 
-    return merged;
-  }
+    if (flipped) {
+      newGrid = this.flip(newGrid);
+    }
 
-  resetMergeFlags() {
-    this.hasMerged = Array(this.boardSize)
-      .fill(null)
-      .map(() => Array(this.boardSize).fill(false));
-  }
+    if (rotated && direction === 'up') {
+      newGrid = this.rotateRight(newGrid);
+    }
 
-  afterMove() {
-    if (this.hasMoved) {
+    if (rotated && direction === 'down') {
+      newGrid = this.rotateLeft(newGrid);
+    }
+
+    this.grid = newGrid;
+
+    if (needAddTile) {
       this.addRandomTile();
     }
 
-    if (this.status === 'playing' && !this.canMove()) {
+    if (this.isWin()) {
+      this.status = 'win';
+    } else if (this.isGameOver()) {
       this.status = 'lose';
     }
   }
 
-  canMove() {
-    for (let i = 0; i < this.boardSize; i++) {
-      for (let j = 0; j < this.boardSize; j++) {
-        if (this.board[i][j] === null) {
-          return true;
-        }
+  slideAndCombineRow(row) {
+    // eslint-disable-next-line no-param-reassign
+    row = row.filter((val) => val !== 0);
 
-        if (
-          i + 1 < this.boardSize &&
-          this.board[i][j] === this.board[i + 1][j]
-        ) {
-          return true;
-        }
+    for (let i = 0; i < row.length - 1; i++) {
+      if (row[i] === row[i + 1]) {
+        row[i] *= 2;
+        this.score += row[i];
+        row[i + 1] = 0;
+      }
+    }
 
-        if (
-          j + 1 < this.boardSize &&
-          this.board[i][j] === this.board[i][j + 1]
-        ) {
-          return true;
+    // eslint-disable-next-line no-param-reassign
+    row = row.filter((val) => val !== 0);
+
+    while (row.length < this.size) {
+      row.push(0);
+    }
+
+    return row;
+  }
+
+  rotateLeft(matrix) {
+    const result = this.createEmptyGrid();
+
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        result[this.size - 1 - c][r] = matrix[r][c];
+      }
+    }
+
+    return result;
+  }
+
+  rotateRight(matrix) {
+    const result = this.createEmptyGrid();
+
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        result[c][this.size - 1 - r] = matrix[r][c];
+      }
+    }
+
+    return result;
+  }
+
+  flip(matrix) {
+    return matrix.map((row) => [...row].reverse());
+  }
+
+  isGameOver() {
+    if (this.grid.flat().includes(0)) {
+      return false;
+    }
+
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size - 1; c++) {
+        if (this.grid[r][c] === this.grid[r][c + 1]) {
+          return false;
         }
       }
     }
 
-    return false;
+    for (let c = 0; c < this.size; c++) {
+      for (let r = 0; r < this.size - 1; r++) {
+        if (this.grid[r][c] === this.grid[r + 1][c]) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
-  isBoardEmpty(board) {
-    return board.every((row) => row.every((cell) => cell === null));
+  isWin() {
+    return this.grid.flat().includes(2048);
   }
 }
-
-module.exports = Game;
